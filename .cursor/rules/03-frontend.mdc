@@ -1,0 +1,100 @@
+---
+description: Rules for Next.js frontend components and pages
+globs: ["frontend/**/*.tsx", "frontend/**/*.ts"]
+alwaysApply: false
+---
+
+# Frontend Rules
+
+## Design System
+
+### Colors
+```css
+--background: #0a0a0a;
+--surface: #111111;
+--surface-2: #1a1a1a;
+--border: #222222;
+--amber: #F59E0B;       /* Primary accent — Pretty Fly brand */
+--amber-dim: #92400E;
+--text: #FAFAFA;
+--text-muted: #71717A;
+--green: #22C55E;       /* Positive / validated */
+--red: #EF4444;         /* Warning / leak */
+```
+
+### Typography
+- Headings: `font-bold tracking-tight`
+- Numbers: `font-mono` (JetBrains Mono via Google Fonts)
+- Body: `text-sm text-zinc-400`
+
+### Component Pattern
+```tsx
+// All cards use this base
+<div className="bg-[#111] border border-[#222] rounded-xl p-6">
+```
+
+## API Calls
+All fetch calls go through `frontend/lib/api.ts`:
+```typescript
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
+
+export async function getCashLeaks(asOfDate?: string): Promise<CashLeaksResponse> {
+  const url = asOfDate ? `${API}/api/cash-leaks?as_of_date=${asOfDate}` : `${API}/api/cash-leaks`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(await res.text())
+  return res.json()
+}
+```
+
+## State Management
+Use Zustand for global app state:
+```typescript
+interface AppStore {
+  isDataLoaded: boolean
+  validationStatus: "pending" | "passed" | "failed"
+  cashLeaks: CashLeak[]
+  totalRecoverable: number
+  setDataLoaded: (v: boolean) => void
+  // ...
+}
+```
+
+## Loading States
+Every data-fetching component shows a skeleton, not a spinner.
+Use `animate-pulse` on placeholder divs.
+
+## Formatting
+```typescript
+// Always format GBP amounts as:
+const fmt = (n: number) => `£${n.toLocaleString("en-GB", { maximumFractionDigits: 0 })}`
+// e.g. £18,200
+```
+
+## No Form Tags
+Never use HTML `<form>`. Use button `onClick` handlers instead.
+
+## Component File Structure
+```
+components/
+├── CashMeter.tsx       # Animated total recoverable amount
+├── LeakCard.tsx        # Single cash leak item
+├── LeakList.tsx        # Ranked list of LeakCards
+├── ReconciliationBadge.tsx
+├── BacktestTimeline.tsx
+├── EmailPreview.tsx
+└── DataLoader.tsx      # Folder path input + validate trigger
+```
+
+## Page Structure
+Each page:
+1. Check `isDataLoaded` from Zustand → if false, redirect to DataLoader
+2. Fetch data via `useEffect` + store in local state
+3. Show skeleton while loading
+4. Show error state if fetch fails
+
+## Key Aesthetic Rules
+- Numbers are always large and amber
+- Every card has a subtle amber left border on hover
+- No rounded corners bigger than `rounded-xl`
+- No shadows — use borders for depth
+- Dark enough that amber pops

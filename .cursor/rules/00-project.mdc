@@ -1,0 +1,45 @@
+---
+description: Project overview and core rules for CashFly
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# CashFly — Cursor Project Rules
+
+## What This Project Is
+CashFly is a cash-leak detection tool for Pretty Fly (fictional DTC streetwear brand).
+It's built for a 3-day hackathon (Wayflyer × Fin, London, June 3–5 2026).
+
+**The single job:** Find stuck cash in inventory, supplier POs, and ad spend.
+**The single constraint:** All numbers must reconcile against bank_transactions.csv.
+
+## Architecture
+- `backend/` — FastAPI + pandas (Python 3.11)
+- `frontend/` — Next.js 14 App Router + Tailwind + shadcn/ui
+- `data/` — Pretty Fly CSVs (21 files, gitignored)
+- `docs/` — PRD, TRD, SE specs (read these before building anything)
+
+## The Golden Rule
+**pandas computes, Claude explains.**
+Never ask the LLM to calculate £ amounts. Compute in Python first.
+Pass computed values to Claude as context for natural language generation only.
+
+## "Today" in This Dataset
+The dataset window is June 2024 → May 2026.
+"Today" = `2026-06-01`. Use this constant everywhere.
+```python
+DATASET_TODAY = date(2026, 6, 1)
+```
+
+## What We Are NOT Building
+- No AI executive team / board meeting
+- No What-If simulator
+- No multi-user auth
+- No real database — all in-memory pandas DataFrames
+- No mobile optimization
+
+## Code Style
+- Python: type hints everywhere, docstrings on all public functions
+- TypeScript: strict mode, no `any`
+- Commits: conventional commits (feat/fix/chore)
+- Error messages: user-facing, plain English, never expose stack traces

@@ -1,0 +1,11 @@
+data/*.csv
+data/*.json
+data/*.txt
+!data/.gitkeep
+backend/.env
+frontend/.env.local
+frontend/node_modules
+frontend/.next
+__pycache__
+*.pyc
+.DS_Store

@@ -1,0 +1,78 @@
+---
+description: Rules for FastAPI backend routes and models
+globs: ["backend/main.py", "backend/models.py"]
+alwaysApply: false
+---
+
+# API Layer Rules
+
+## Files This Applies To
+- `backend/main.py`
+- `backend/models.py`
+
+## FastAPI Setup
+```python
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI(title="CashFly API", version="1.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000"], 
+                   allow_methods=["*"], allow_headers=["*"])
+```
+
+## App State Pattern
+```python
+from fastapi import FastAPI
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.dfs = {}          # DataFrames loaded here
+    app.state.validated = False
+    yield
+
+app = FastAPI(lifespan=lifespan)
+```
+
+## Required Routes
+```
+POST /api/load-data       → LoadDataResponse
+GET  /api/health          → HealthResponse
+GET  /api/cash-position   → CashPosition
+GET  /api/cash-leaks      → CashLeaksResponse
+GET  /api/backtest        → BacktestResult
+POST /api/generate-email  → EmailDraftResponse
+```
+
+## Guard Pattern
+Every route except `/api/health` and `/api/load-data` must check:
+```python
+if not app.state.validated:
+    raise HTTPException(status_code=400, detail="Data not loaded. Call /api/load-data first.")
+```
+
+## Response Models
+Always use Pydantic models — never return raw dicts.
+All monetary fields: `float`, suffix `_gbp` in field name.
+All date fields: `str` in ISO format `YYYY-MM-DD`.
+
+## Error Handling
+```python
+@app.exception_handler(Exception)
+async def global_handler(request, exc):
+    return JSONResponse({"error": str(exc), "type": type(exc).__name__}, status_code=500)
+```
+Never expose pandas stack traces to the frontend.
+
+## Streaming (Email Generation)
+Use `StreamingResponse` for `/api/generate-email`:
+```python
+from fastapi.responses import StreamingResponse
+
+async def stream_email():
+    async with anthropic_client.messages.stream(...) as stream:
+        async for text in stream.text_stream:
+            yield f"data: {text}\n\n"
+
+return StreamingResponse(stream_email(), media_type="text/event-stream")
+```

@@ -1,0 +1,88 @@
+---
+description: Rules for all Anthropic Claude API usage
+globs: ["backend/llm_service.py", "frontend/lib/llm*.ts"]
+alwaysApply: false
+---
+
+# LLM Integration Rules
+
+## The Prime Directive
+**Claude narrates. Pandas computes.**
+
+Never pass a computation task to Claude. Always:
+1. Compute the number in Python
+2. Pass computed values as context to Claude
+3. Ask Claude only to explain or write copy
+
+## Model
+Always use: `claude-sonnet-4-20250514`
+Never use Opus (too slow for demo). Never use Haiku (quality too low).
+
+## System Prompt (use verbatim)
+```python
+SYSTEM_PROMPT = """You are a DTC finance analyst for Pretty Fly, a London streetwear brand selling premium hoodies, tees, sweatpants, caps, and trainers.
+
+You write concise, plain-English explanations and email marketing copy.
+
+Rules:
+- Never invent numbers. Only use the exact figures provided in the user message.
+- Be direct. No filler phrases like "certainly" or "great question".
+- Max 3 sentences for explanations.
+- Email copy: punchy, brand-appropriate, not corporate.
+- Pretty Fly tone: confident, London streetwear, not luxury, not fast fashion.
+"""
+```
+
+## Explanation Prompt Pattern
+```python
+f"""Dead stock alert:
+Product: {variant_title} ({sku})
+Units in warehouse: {units}
+Days since last meaningful sale: {days_stagnant}
+Cash tied up (at landed cost): £{cash_tied:,.0f}
+Average weekly sales last month: {weekly_sales:.1f} units
+
+In 2-3 sentences, explain why this is a cash risk for Pretty Fly and what the urgency is."""
+```
+
+## Email Generation Prompt Pattern
+```python
+f"""Generate a promotional email campaign to move dead stock.
+
+Product: {variant_title}
+Units to clear: {units}
+Suggested discount: {discount_pct}% (based on historical lift data)
+Target audience: customers who bought {related_product} in the last 6 months
+Historical email open rate for this segment: {open_rate:.0%}
+
+Return ONLY a JSON object with these exact keys:
+{{
+  "subject": "email subject line (max 60 chars)",
+  "preview_text": "preview text (max 90 chars)",
+  "body": "email body (3-4 paragraphs, plain text, no HTML)",
+  "cta": "call to action button text (max 5 words)"
+}}"""
+```
+
+## Token Limits
+- Explanations: `max_tokens=200`
+- Email copy: `max_tokens=400`
+- Always set `temperature=0.7` for copy, `temperature=0.3` for explanations
+
+## Error Handling
+```python
+try:
+    response = client.messages.create(...)
+except anthropic.APIError as e:
+    # Return fallback — never crash the whole endpoint
+    return {"explanation": f"Cash risk: £{cash_tied:,.0f} tied in {units} units of {variant_title}."}
+```
+
+## Streaming (Frontend)
+When streaming to frontend via SSE:
+```typescript
+const response = await fetch(`${API}/api/generate-email`, {method: "POST", body: ...})
+const reader = response.body?.getReader()
+// Read chunks and append to UI state
+```
+Always show a typing indicator while streaming.

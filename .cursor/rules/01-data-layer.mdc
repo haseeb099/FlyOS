@@ -1,0 +1,86 @@
+---
+description: Rules for all data computation in cash_engine.py and data_loader.py
+globs: ["backend/**/*.py"]
+alwaysApply: false
+---
+
+# Data Layer Rules
+
+## Files This Applies To
+- `backend/cash_engine.py`
+- `backend/data_loader.py`
+
+## Data Loading
+- Load all CSVs once at startup via `/api/load-data`
+- Store as `app.state.dfs: dict[str, pd.DataFrame]`
+- Parse dates on load: `parse_dates=["created_at", "delivery_date", ...]`
+- Run `validate.py` before allowing any computation
+
+## Key Joins (Memorise These)
+
+### Landed Cost
+```python
+landed = (
+    po_line_items
+    .merge(purchase_orders[["po_id", "delivery_date"]], on="po_id")
+    .query("delivery_date <= @as_of_date")
+    .groupby("variant_id")["unit_cost"]
+    .mean()
+    .reset_index()
+    .rename(columns={"unit_cost": "avg_landed_cost_gbp"})
+)
+```
+
+### Current Stock
+```python
+stock = (
+    inventory_movements
+    .query("date <= @as_of_date")
+    .groupby("variant_id")["quantity_change"]
+    .sum()
+    .reset_index()
+    .rename(columns={"quantity_change": "current_stock_units"})
+)
+```
+
+### Sales Velocity (last N days)
+```python
+cutoff = as_of_date - timedelta(days=window_days)
+velocity = (
+    line_items
+    .merge(orders[["order_id", "created_at"]], on="order_id")
+    .query("@cutoff <= created_at <= @as_of_date")
+    .groupby("variant_id")["quantity"]
+    .sum()
+    .reset_index()
+    .rename(columns={"quantity": f"units_sold_last_{window_days}d"})
+)
+```
+
+## Dead Stock Criteria
+```python
+DEAD_STOCK_MIN_DAYS = 45    # Variants with > 45 days of stock
+DEAD_STOCK_MAX_WEEKLY = 2   # AND < 2 units sold last 7 days
+```
+
+## Currency
+- All amounts in GBP
+- Some PO costs are EUR/USD — check for a `currency` + `exchange_rate` column
+- If present: `unit_cost_gbp = unit_cost * exchange_rate`
+
+## Null Handling
+- Variants with no PO data: exclude from cash-at-risk (can't compute landed cost)
+- Variants with no inventory movements: `current_stock = 0`
+- Variants with no sales: `units_sold = 0`, `days_of_stock = 999`
+
+## Date Filtering
+Every public function in `cash_engine.py` MUST accept `as_of_date: date` parameter.
+This enables backtesting. Default = `DATASET_TODAY = date(2026, 6, 1)`.
+
+## Testing Your Numbers
+Before any API call returns, cross-check:
+```python
+total_cogs = (line_items.quantity * landed_cost_per_variant).sum()
+bank_supplier_outflow = bank_transactions[bank_transactions.raw_category == "SUPPLIER"].amount.sum()
+# These should be in the same ballpark (not identical — COGS ≠ payments, but close)
+```
